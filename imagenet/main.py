@@ -17,13 +17,12 @@ import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
-import models as m
-from models.mobilenet_v3.mobilenet_v3_model import mobilenet_v3_large, mobilenet_v3_small
-from torch.utils import mkldnn as mkldnn_utils
+from mobilenet_v3 import mobilenet_v3_large, mobilenet_v3_small
 
-model_names = sorted(name for name in models.__dict__
-                     if name.islower() and not name.startswith("__")
-                     and callable(models.__dict__[name]))
+#model_names = sorted(name for name in models.__dict__
+#                     if name.islower() and not name.startswith("__")
+#                     and callable(models.__dict__[name]))
+model_names = ["mobilenet_v3_large", "mobilenet_v3_small"]
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
@@ -80,8 +79,6 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
                          'multi node data parallel training')
 parser.add_argument('--mkldnn', action='store_true', default=False,
                     help='use mkldnn weight cache')
-parser.add_argument('--bf16', action='store_true', default=False,
-                    help='enable bf16 operator')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disable CUDA')
 parser.add_argument('-i', '--iterations', default=0, type=int, metavar='N',
@@ -218,7 +215,7 @@ def main_worker(gpu, ngpus_per_node, args):
             if args.gpu is not None and args.cuda:
                 # best_acc1 may be from a checkpoint from a different GPU
                 best_acc1 = best_acc1.to(args.gpu)
-            model.load_state_dict(checkpoint['state_dict'])
+            model.load_state_dict(torch.load(checkpoint['state_dict']))
             optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.resume, checkpoint['epoch']))
@@ -263,12 +260,12 @@ def main_worker(gpu, ngpus_per_node, args):
 
     if args.evaluate:
         if use_mkldnn and not args.cuda:
-            print("using mkldnn model to do inference\n")
+            print("using cpu model to do inference\n")
 
         validate(val_loader, model, criterion, args)
         return
     if use_mkldnn and not args.cuda:
-        print("using mkldnn model to training\n")
+        print("using cpu model to training\n")
 
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
@@ -338,26 +335,14 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         if args.cuda:
             target = target.cuda(args.gpu, non_blocking=True)
 
-        if args.bf16 and not args.cuda:
-            images = images.to_mkldnn(torch.bfloat16)
-        elif args.mkldnn and not args.cuda:
-            images = images.to_mkldnn()
-
         # compute output
-        output, aux = model(images)
+        output = model(images)
 
-        if (args.mkldnn or args.bf16) and not args.cuda:
-            output = output.to_dense()
-            aux = aux.to_dense()
-        loss1 = criterion(output, target)
-        loss2 = criterion(aux, target)
-        loss = 0.4 * loss2 + loss1
+
+        loss = criterion(output, target)
 
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
-
-        if (args.mkldnn or args.bf16) and not args.cuda:
-            images = images.to_dense()
 
         losses.update(loss.item(), images.size(0))
         top1.update(acc1[0], images.size(0))
@@ -399,11 +384,6 @@ def validate(val_loader, model, criterion, args):
 
     # switch to evaluate mode
     model.eval()
-    if args.evaluate and not args.cuda and (args.mkldnn or args.bf16):
-        if args.bf16:
-            model = mkldnn_utils.to_mkldnn(model, torch.bfloat16)
-        else:
-            model = mkldnn_utils.to_mkldnn(model)
 
     with torch.no_grad():
         for i, (images, target) in enumerate(val_loader):
@@ -415,11 +395,6 @@ def validate(val_loader, model, criterion, args):
                 if args.cuda:
                     target = target.cuda(args.gpu, non_blocking=True)
 
-                if args.bf16 and not args.cuda:
-                    images = images.to_mkldnn(torch.bfloat16)
-                elif args.mkldnn and not args.cuda:
-                    images = images.to_mkldnn()
-
                 # compute output
                 output = model(images)
 
@@ -427,8 +402,6 @@ def validate(val_loader, model, criterion, args):
                 if i >= warmup:
                     batch_time.update(time.time() - end)
 
-                if (args.mkldnn or args.bf16) and not args.cuda:
-                    output = output.to_dense()
 
                 loss = criterion(output, target)
 
@@ -445,10 +418,6 @@ def validate(val_loader, model, criterion, args):
                     break
 
             if args.profile:
-                if args.bf16 and not args.cuda and not images.is_mkldnn:
-                    images = images.to_mkldnn(torch.bfloat16)
-                elif args.mkldnn and not args.cuda and not images.is_mkldnn:
-                    images = images.to_mkldnn()
                 with torch.autograd.profiler.profile() as prof:
                     output = model(images)
                 prof.export_chrome_trace(torch.backends.quantized.engine + "_result.json")
