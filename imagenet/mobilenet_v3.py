@@ -12,7 +12,7 @@ __all__ = ['MobileNetV3', 'mobilenet_v3_large', 'mobilenet_v3_small']
 
 model_urls = {
     'mobilenet_v3_large': None,
-    'mobilenet_v3_small': "https://drive.google.com/open?id=1lCsN3kWXAu8C30bQrD2JTZ7S2v4yt23C",
+    'mobilenet_v3_small': "models/mobilenet_v3/mobilenetv3_small_67.4.pth.tar",
 }
 
 def conv_bn(inp, oup, stride, conv_layer=nn.Conv2d, norm_layer=nn.BatchNorm2d, nlin_layer=nn.ReLU):
@@ -125,7 +125,7 @@ class MobileBottleneck(nn.Module):
 
 
 class MobileNetV3(nn.Module):
-    def __init__(self, mode, n_class=1000, input_size=224, dropout=0.8, mode='small', width_mult=1.0):
+    def __init__(self, mode='small', n_class=1000, input_size=224, dropout=0.8, width_mult=1.0):
         super(MobileNetV3, self).__init__()
         input_channel = 16
         last_channel = 1280
@@ -238,8 +238,7 @@ def _mobilenetv3(arch, mode, pretrained, **kwargs):
         if model_url is None:
             raise NotImplementedError('pretrained {} is not supported as of now'.format(arch))
         else:
-            state_dict = load_state_dict_from_url(model_url)
-            model.load_state_dict(state_dict, strict=True)
+            model.load_state_dict(torch.load(model_url,  map_location=torch.device('cpu')))
 
     return model
 
