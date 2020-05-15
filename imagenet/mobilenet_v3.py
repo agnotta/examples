@@ -8,11 +8,11 @@ except ImportError:
 
 
 
-__all__ = ['MobileNetV3', 'mobilenet_v3_large', 'mobilenet_v3_small']
+__all__ = ["MobileNetV3", "mobilenet_v3_large", "mobilenet_v3_small"]
 
 model_urls = {
-    'mobilenet_v3_large': None,
-    'mobilenet_v3_small': "models/mobilenet_v3/mobilenetv3_small_67.4.pth.tar",
+    "mobilenet_v3_large": "models/mobilenet_v3/mobilenetv3_large_checkpoint.pth.tar",
+    "mobilenet_v3_small": "models/mobilenet_v3/mobilenetv3_small_67.4.pth.tar",
 }
 
 def conv_bn(inp, oup, stride, conv_layer=nn.Conv2d, norm_layer=nn.BatchNorm2d, nlin_layer=nn.ReLU):
